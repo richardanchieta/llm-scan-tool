@@ -1,0 +1,40 @@
+# Binaries
+/llm-scan
+/llm-scan.exe
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Build & cache
+*.out
+*.test
+*.prof
+*.coverprofile
+*.pprof
+*.bench
+*.tmp
+*.swp
+*.swo
+
+# Go module/vendor cache
+/vendor/
+/bin/
+/dist/
+/build/
+/coverage/
+/tmp/
+
+# IDE/editor configs
+.idea/
+.vscode/
+*.iml
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Output artifacts from the scanner
+LLM_SUMMARY.md
+LLM_SUMMARY.md.json
