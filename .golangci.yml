@@ -13,7 +13,9 @@ linters:
     - revive
     - ineffassign
     - errcheck
-
+formatters:
+  enable:
+    - gofmt
 
 output:
   formats:
