@@ -1,39 +1,23 @@
+# .github/workflows/ci.yml
 name: Go CI
 
 on:
-  push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
+  push: { branches: ["main"] }
+  pull_request: { branches: ["main"] }
+  workflow_dispatch: {}
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: "1.23"
-          cache: true
-
-      - name: Install dependencies
-        run: go mod download
-
-      - name: Build
-        run: go build ./...
-
-      - name: Run tests
-        run: go test ./... -v -race -coverprofile=coverage.out
-
-      - name: Upload coverage
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-report
-          path: coverage.out
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: "1.23.x", cache: true }
+      - run: go mod download
+      - run: go build ./...
+      - run: go test ./... -v -race -coverprofile=coverage.out
+      - uses: actions/upload-artifact@v4
+        with: { name: coverage-report, path: coverage.out }
 
   lint:
     runs-on: ubuntu-latest
@@ -42,7 +26,7 @@ jobs:
       - uses: actions/setup-go@v5
         with: { go-version: "1.23.x", cache: true }
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v7
         with:
-          version: v1.60.3
-          args: --timeout=5m --out-format=colored-line-number
+          version: v2.1.0
+          args: --timeout=5m
