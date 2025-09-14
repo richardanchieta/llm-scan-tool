@@ -1,7 +1,9 @@
+// Package files contém utilitários de leitura segura/eficiente de arquivos.
 package files
 
 import (
 	"bufio"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -24,47 +26,55 @@ func DefaultIgnore() []string {
 	}
 }
 
-func ReadHead(path string, max int64) (string, error) {
+// ReadHead lê até maxBytes do início do arquivo (head) e retorna como string.
+// Útil para limitação de contexto em arquivos grandes.
+func ReadHead(path string, maxBytes int64) (string, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return "", err
 	}
-	defer f.Close()
-	var b strings.Builder
+	// garantir errcheck no Close
+	defer func() { _ = f.Close() }()
+
+	if maxBytes <= 0 {
+		return "", nil
+	}
+
 	r := bufio.NewReader(f)
-	var n int64
-	for {
-		if n >= max {
+	var (
+		varBuf  = make([]byte, 32*1024)
+		total   int64
+		builder strings.Builder
+	)
+
+	// evita QF1006: já checa no header do for
+	for total < maxBytes {
+		toRead := int64(len(varBuf))
+		if rem := maxBytes - total; rem < toRead {
+			toRead = rem
+		}
+		n, readErr := io.ReadFull(r, varBuf[:toRead])
+		if n > 0 {
+			builder.Write(varBuf[:n])
+			total += int64(n)
+		}
+		if errors.Is(readErr, io.EOF) || errors.Is(readErr, io.ErrUnexpectedEOF) {
 			break
 		}
-		chunk := int64(4096)
-		if max-n < chunk {
-			chunk = max - n
-		}
-		buf := make([]byte, chunk)
-		read, err := r.Read(buf)
-		if read > 0 {
-			b.Write(buf[:read])
-			n += int64(read)
-		}
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return b.String(), err
+		if readErr != nil {
+			return builder.String(), readErr
 		}
 	}
-	return b.String(), nil
+	return builder.String(), nil
 }
 
+// MatchAny verifica se path casa com qualquer um dos globs fornecidos.
 func MatchAny(globs []string, path string) bool {
+	if len(globs) == 0 {
+		return false
+	}
 	for _, g := range globs {
-		ok, _ := filepath.Match(g, path)
-		if ok {
-			return true
-		}
-		// also try on base name
-		if ok, _ := filepath.Match(g, filepath.Base(path)); ok {
+		if ok, _ := filepath.Match(g, path); ok {
 			return true
 		}
 	}

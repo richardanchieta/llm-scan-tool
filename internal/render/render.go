@@ -1,3 +1,4 @@
+// Package render transforma o Summary em artefatos (Markdown e JSON).
 package render
 
 import (
@@ -11,6 +12,7 @@ import (
 	"github.com/richardanchieta/llm-scan-tool/internal/collect"
 )
 
+// BuildArtifacts recebe um Summary e retorna o Markdown e o JSON prontos.
 func BuildArtifacts(sum *collect.Summary) (markdown string, jsonBytes []byte, err error) {
 	j, err := sum.MarshalJSON()
 	if err != nil {

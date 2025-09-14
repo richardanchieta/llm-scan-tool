@@ -1,3 +1,5 @@
+// Package collect agrega metadados do repositório (módulos, proto, migrações,
+// READMEs, decisões etc.) para geração do artefato otimizado para LLM.
 package collect
 
 import (
@@ -14,6 +16,7 @@ import (
 	"github.com/richardanchieta/llm-scan-tool/internal/files"
 )
 
+// Config define parâmetros de varredura (root, filtros, limites, etc.).
 type Config struct {
 	Root            string
 	MaxFileBytes    int64
@@ -23,6 +26,7 @@ type Config struct {
 	TreeDepth       int
 }
 
+// ReadmeSummary guarda um extrato leve de um README (título/objetivo/primeiro parágrafo).
 type ReadmeSummary struct {
 	File      string `json:"file"`
 	Title     string `json:"title"`
@@ -30,6 +34,7 @@ type ReadmeSummary struct {
 	Objective string `json:"objective"` // opcional: captura seção "Objetivo"/"Objective"
 }
 
+// Summary é o objeto principal agregado pelo coletor; base para render Markdown/JSON.
 type Summary struct {
 	Root            string                   `json:"root"`
 	GeneratedAt     time.Time                `json:"generated_at"`
@@ -48,12 +53,14 @@ type Summary struct {
 	NotableConfigs  []string                 `json:"notable_configs"`
 }
 
+// GoModule descreve um módulo Go encontrado (path/module/requires).
 type GoModule struct {
 	Path     string   `json:"path"`
 	Module   string   `json:"module"`
 	Requires []string `json:"requires"`
 }
 
+// ProtoInfo descreve um arquivo/projeto Protobuf (package, services, RPCs).
 type ProtoInfo struct {
 	File     string   `json:"file"`
 	Package  string   `json:"package"`
@@ -61,12 +68,14 @@ type ProtoInfo struct {
 	RPCs     []string `json:"rpcs"`
 }
 
+// Decision representa uma ADR/decisão técnica detectada.
 type Decision struct {
 	File    string `json:"file"`
 	Title   string `json:"title"`
 	Summary string `json:"summary"`
 }
 
+// Scan executa a varredura e devolve um *Summary pronto para renderização.
 func Scan(ctx context.Context, cfg Config) (*Summary, error) {
 	if cfg.Threads <= 0 {
 		cfg.Threads = runtime.NumCPU()
@@ -113,10 +122,11 @@ func Scan(ctx context.Context, cfg Config) (*Summary, error) {
 	sem := make(chan struct{}, cfg.Threads)
 	var mu sync.Mutex
 	var wg sync.WaitGroup
+loop:
 	for _, p := range paths {
 		select {
 		case <-ctx.Done():
-			break
+			break loop
 		default:
 		}
 		wg.Add(1)
@@ -257,8 +267,9 @@ func parseGoMod(path string) (*GoModule, error) {
 	return gm, nil
 }
 
-func parseProto(path string, max int64) (*ProtoInfo, error) {
-	head, err := files.ReadHead(path, max)
+// >>> Evitar conflito com built-in max (Go 1.21+)
+func parseProto(path string, maxBytes int64) (*ProtoInfo, error) {
+	head, err := files.ReadHead(path, maxBytes)
 	if err != nil {
 		return nil, err
 	}
