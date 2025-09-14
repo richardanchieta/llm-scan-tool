@@ -2,9 +2,8 @@
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Go Report Card](https://goreportcard.com/badge/github.com/richardanchieta/llm-scan-tool)](https://goreportcard.com/report/github.com/richardanchieta/llm-scan-tool)
-[![Build](https://github.com/richardanchieta/llm-scan-tool/actions/workflows/ci.yml/badge.svg)](https://github.com/richardanchieta/llm-scan-tool/actions)
+[![Build](https://github.com/richardanchieta/llm-scan-tool/actions/workflows/go.yml/badge.svg)](https://github.com/richardanchieta/llm-scan-tool/actions)
 
-https://github.com/richardanchieta/llm-scan-tool/actions/workflows/ci.yml
 
 ⚡ Summarize your monorepo for humans & LLMs — fast, structured, and context-ready.
 

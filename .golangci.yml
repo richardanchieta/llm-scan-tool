@@ -1,0 +1,23 @@
+version: "2"
+
+run:
+  timeout: 5m
+  relative-path-mode: gomod
+  go: "1.23"
+
+linters:
+  default: standard
+  enable:
+    - govet
+    - staticcheck
+    - revive
+    - gofmt
+    - ineffassign
+    - errcheck
+
+
+output:
+  formats:
+    text:
+      path: stdout
+      colors: true
