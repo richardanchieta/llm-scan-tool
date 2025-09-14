@@ -339,8 +339,8 @@ func parseDecision(path string, maxBytes int64) (*Decision, error) {
 	return &Decision{File: path, Title: title, Summary: summary}, nil
 }
 
-func parseReadmeSummary(path string, max int64) (*ReadmeSummary, error) {
-	head, err := files.ReadHead(path, max)
+func parseReadmeSummary(path string, maxBytes int64) (*ReadmeSummary, error) {
+	head, err := files.ReadHead(path, maxBytes)
 	if err != nil {
 		return nil, err
 	}
