@@ -293,8 +293,8 @@ func parseProto(path string, maxBytes int64) (*ProtoInfo, error) {
 	return pi, nil
 }
 
-func parseMakeTargets(path string, max int64) ([]string, error) {
-	head, err := files.ReadHead(path, max)
+func parseMakeTargets(path string, maxBytes int64) ([]string, error) {
+	head, err := files.ReadHead(path, maxBytes)
 	if err != nil {
 		return nil, err
 	}
@@ -315,8 +315,8 @@ func parseMakeTargets(path string, max int64) ([]string, error) {
 	return targets, nil
 }
 
-func parseDecision(path string, max int64) (*Decision, error) {
-	head, err := files.ReadHead(path, max)
+func parseDecision(path string, maxBytes int64) (*Decision, error) {
+	head, err := files.ReadHead(path, maxBytes)
 	if err != nil {
 		return nil, err
 	}

@@ -1,3 +1,5 @@
+// Command llm-scan-tool scans a codebase and generates a Markdown summary
+// suitable for providing context to LLMs. It also outputs a JSON summary.
 package main
 
 import (
