@@ -38,3 +38,9 @@ Thumbs.db
 # Output artifacts from the scanner
 LLM_SUMMARY.md
 LLM_SUMMARY.md.json
+
+# executáveis do build
+llm-scan-tool
+llm-scan-tool.exe
+llm-scan-tool.*
+

@@ -52,6 +52,38 @@ func BuildArtifacts(sum *collect.Summary) (markdown string, jsonBytes []byte, er
 	}
 	b.WriteString("```\n\n")
 
+	// Test Coverage (Go + BDD)
+	if sum.TestCoverage != nil {
+		b.WriteString("## Test Coverage\n\n")
+
+		// Go coverage
+		if sum.TestCoverage.HasGoProfile {
+			b.WriteString(fmt.Sprintf("- **Go coverage:** %.2f%%  (`%d/%d` statements)\n",
+				sum.TestCoverage.Percent, sum.TestCoverage.CoveredStmts, sum.TestCoverage.TotalStmts))
+		} else {
+			b.WriteString("- **Go coverage:** (no coverprofile found)\n")
+		}
+
+		// BDD coverage / signals
+		if sum.TestCoverage.BDD.FeatureFiles > 0 || len(sum.TestCoverage.BDD.Reports) > 0 {
+			b.WriteString("  - **BDD (.feature):**\n")
+			b.WriteString(fmt.Sprintf("    - feature files: **%d**\n", sum.TestCoverage.BDD.FeatureFiles))
+			if sum.TestCoverage.BDD.Features+sum.TestCoverage.BDD.Scenarios+sum.TestCoverage.BDD.Steps > 0 {
+				b.WriteString(fmt.Sprintf("    - cucumber totals: features=%d, scenarios=%d, steps=%d\n",
+					sum.TestCoverage.BDD.Features, sum.TestCoverage.BDD.Scenarios, sum.TestCoverage.BDD.Steps))
+			}
+			if len(sum.TestCoverage.BDD.Reports) > 0 {
+				// limitar listagem para não inflar contexto
+				lim := sum.TestCoverage.BDD.Reports
+				if len(lim) > 8 {
+					lim = append(lim[:8], "…")
+				}
+				b.WriteString("    - reports: " + strings.Join(lim, ", ") + "\n")
+			}
+		}
+		b.WriteString("\n")
+	}
+
 	// Go modules
 	if len(sum.GoModules) > 0 {
 		b.WriteString("## Go Modules\n\n")

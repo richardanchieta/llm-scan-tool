@@ -34,6 +34,25 @@ type ReadmeSummary struct {
 	Objective string `json:"objective"` // opcional: captura seção "Objetivo"/"Objective"
 }
 
+// CoverageSummary resume cobertura do repositório.
+type CoverageSummary struct {
+	Sources      []string `json:"sources"`        // caminhos dos arquivos usados (coverage.out, coverage.txt, cucumber.json, etc.)
+	TotalStmts   int      `json:"total_stmts"`    // soma dos "numStatements" do coverprofile
+	CoveredStmts int      `json:"covered_stmts"`  // soma dos "numStatements" com count>0
+	Percent      float64  `json:"percent"`        // (CoveredStmts / TotalStmts) * 100
+	HasGoProfile bool     `json:"has_go_profile"` // se achou coverage.out/coverprofile
+	BDD          BDDSum   `json:"bdd"`
+}
+
+// BDDSum agrega insumos de BDD (features + relatórios Cucumber).
+type BDDSum struct {
+	FeatureFiles int      `json:"feature_files"` // número de arquivos .feature
+	Reports      []string `json:"reports"`       // caminhos de cucumber.json ou junit.xml
+	Features     int      `json:"features"`      // contados via cucumber.json (se existir)
+	Scenarios    int      `json:"scenarios"`
+	Steps        int      `json:"steps"`
+}
+
 // Summary é o objeto principal agregado pelo coletor; base para render Markdown/JSON.
 type Summary struct {
 	Root            string                   `json:"root"`
@@ -51,6 +70,7 @@ type Summary struct {
 	TechStats       map[string]int           `json:"tech_stats"`
 	Tree            []string                 `json:"tree"`
 	NotableConfigs  []string                 `json:"notable_configs"`
+	TestCoverage    *CoverageSummary         `json:"test_coverage"`
 }
 
 // GoModule descreve um módulo Go encontrado (path/module/requires).
@@ -193,6 +213,38 @@ loop:
 					sum.Readmes = append(sum.Readmes, p)
 					mu.Unlock()
 				}
+			case strings.HasSuffix(lower, ".feature"):
+				mu.Lock()
+				if sum.TestCoverage == nil {
+					sum.TestCoverage = &CoverageSummary{}
+				}
+				sum.TestCoverage.BDD.FeatureFiles++
+				mu.Unlock()
+
+			case filepath.Base(lower) == "coverage.out" || strings.HasSuffix(lower, ".coverprofile") || strings.HasSuffix(lower, "coverage.txt"):
+				mu.Lock()
+				if sum.TestCoverage == nil {
+					sum.TestCoverage = &CoverageSummary{}
+				}
+				sum.TestCoverage.Sources = append(sum.TestCoverage.Sources, p)
+				mu.Unlock()
+
+			case strings.HasSuffix(lower, ".json") && (strings.Contains(lower, "cucumber") || strings.Contains(lower, "godog")):
+				mu.Lock()
+				if sum.TestCoverage == nil {
+					sum.TestCoverage = &CoverageSummary{}
+				}
+				sum.TestCoverage.BDD.Reports = append(sum.TestCoverage.BDD.Reports, p)
+				mu.Unlock()
+
+			case strings.HasSuffix(lower, ".xml") && (strings.Contains(lower, "junit") || strings.Contains(lower, "cucumber")):
+				mu.Lock()
+				if sum.TestCoverage == nil {
+					sum.TestCoverage = &CoverageSummary{}
+				}
+				sum.TestCoverage.BDD.Reports = append(sum.TestCoverage.BDD.Reports, p)
+				mu.Unlock()
+
 			}
 
 			// tech stats quick
@@ -206,6 +258,48 @@ loop:
 		}()
 	}
 	wg.Wait()
+
+	// Consolidar cobertura (Go + BDD) se houver insumos
+	if sum.TestCoverage != nil {
+		// 1) Perfis de cobertura do Go (coverage.out / coverprofile / coverage.txt)
+		var goSources []string
+		for _, s := range sum.TestCoverage.Sources {
+			low := strings.ToLower(s)
+			if strings.HasSuffix(low, "coverage.out") || strings.HasSuffix(low, ".coverprofile") || strings.HasSuffix(low, "coverage.txt") {
+				goSources = append(goSources, filepath.Join(cfg.Root, s))
+			}
+		}
+		if len(goSources) > 0 {
+			total, covered := 0, 0
+			for _, path := range goSources {
+				t, c := parseGoCoverProfile(path) // heurística que soma statements cobertos/total
+				total += t
+				covered += c
+			}
+			if total > 0 {
+				sum.TestCoverage.HasGoProfile = true
+				sum.TestCoverage.TotalStmts = total
+				sum.TestCoverage.CoveredStmts = covered
+				sum.TestCoverage.Percent = float64(covered) * 100.0 / float64(total)
+			}
+		}
+
+		// 2) BDD: se houver cucumber JSON, agregue contagens de features/cenários/passos
+		if len(sum.TestCoverage.BDD.Reports) > 0 {
+			var f, sc, st int
+			for _, rel := range sum.TestCoverage.BDD.Reports {
+				ff, ss, tt := parseCucumberJSON(filepath.Join(cfg.Root, rel))
+				f += ff
+				sc += ss
+				st += tt
+			}
+			if f+sc+st > 0 {
+				sum.TestCoverage.BDD.Features = f
+				sum.TestCoverage.BDD.Scenarios = sc
+				sum.TestCoverage.BDD.Steps = st
+			}
+		}
+	}
 
 	// Build pruned tree
 	sum.Tree = buildTree(cfg.Root, cfg.TreeDepth, excludeGlobs)
@@ -426,6 +520,87 @@ func parseReadmeSummary(path string, maxBytes int64) (*ReadmeSummary, error) {
 		Objective: limit(objective, maxLen),
 	}
 	return rs, nil
+}
+
+// parseGoCoverProfile lê um arquivo coverprofile (formato go tool cover -coverprofile)
+// e soma statements totais/cobertos usando a heurística: se count>0 => cobre numStatements.
+func parseGoCoverProfile(path string) (total int, covered int) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return 0, 0
+	}
+	lines := strings.Split(string(data), "\n")
+	for _, ln := range lines {
+		ln = strings.TrimSpace(ln)
+		if ln == "" || strings.HasPrefix(ln, "mode:") {
+			continue
+		}
+		// formato: file.go:line1.col1,line2.col2 numStatements count
+		// ex: internal/x.go:14.2,19.3 3 1
+		parts := strings.Fields(ln)
+		if len(parts) < 3 {
+			continue
+		}
+		// parts[0] = "file:span", parts[1] = numStatements, parts[2] = count
+		numStmts := atoiSafe(parts[1])
+		count := atoiSafe(parts[2])
+		total += numStmts
+		if count > 0 {
+			covered += numStmts
+		}
+	}
+	return
+}
+
+func atoiSafe(s string) int {
+	n := 0
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return n
+		}
+		n = n*10 + int(r-'0')
+	}
+	return n
+}
+
+// parseCucumberJSON agrega features/cenários/passos de um arquivo cucumber.json (godog/cucumber).
+// Forma resiliente: ignora campos ausentes e erros de parse.
+func parseCucumberJSON(path string) (features, scenarios, steps int) {
+	data, err := os.ReadFile(path)
+	if err != nil || len(data) == 0 {
+		return
+	}
+	// cucumber.json costuma ser um array de Features
+	// Estrutura mínima parcial para deserialização resiliente
+	type step struct{}
+	type element struct {
+		Steps []step `json:"steps"`
+		Type  string `json:"type"` // "scenario" etc.
+	}
+	type feature struct {
+		Elements []element `json:"elements"`
+	}
+	var arr []feature
+	if err := json.Unmarshal(data, &arr); err != nil {
+		// alguns geradores usam objeto raiz { "features": [...] }
+		var root struct {
+			Features []feature `json:"features"`
+		}
+		if err2 := json.Unmarshal(data, &root); err2 != nil {
+			return
+		}
+		arr = root.Features
+	}
+	for _, f := range arr {
+		features++
+		for _, el := range f.Elements {
+			if strings.EqualFold(el.Type, "scenario") || el.Type == "" {
+				scenarios++
+			}
+			steps += len(el.Steps)
+		}
+	}
+	return
 }
 
 type treeNode struct {
