@@ -5,6 +5,7 @@ package collect
 import (
 	"context"
 	"encoding/json"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -97,6 +98,8 @@ type Decision struct {
 
 // Scan executa a varredura e devolve um *Summary pronto para renderização.
 func Scan(ctx context.Context, cfg Config) (*Summary, error) {
+	matcher := files.NewGitIgnoreMatcher(cfg.Root)
+
 	if cfg.Threads <= 0 {
 		cfg.Threads = runtime.NumCPU()
 	}
@@ -115,11 +118,20 @@ func Scan(ctx context.Context, cfg Config) (*Summary, error) {
 		if err != nil {
 			return nil // skip errors
 		}
+
 		rel, _ := filepath.Rel(cfg.Root, path)
 		rel = filepath.ToSlash(rel)
 		if rel == "." {
 			return nil
 		}
+
+		if matcher.Match(rel) {
+			if d.IsDir() {
+				return fs.SkipDir // <- impede descer em node_modules/ e similares
+			}
+			return nil // pula o arquivo
+		}
+
 		// Exclude dirs quick
 		if d.IsDir() {
 			if files.MatchAny(excludeGlobs, rel+"/") {
@@ -610,6 +622,7 @@ type treeNode struct {
 }
 
 func buildTree(root string, depth int, exclude []string) []string {
+	matcher := files.NewGitIgnoreMatcher(root)
 	if depth <= 0 {
 		depth = 3
 	}
@@ -628,6 +641,11 @@ func buildTree(root string, depth int, exclude []string) []string {
 			path := filepath.Join(dir, e.Name())
 			rel, _ := filepath.Rel(root, path)
 			rel = filepath.ToSlash(rel)
+
+			if matcher.Match(rel) {
+				continue
+			}
+
 			if e.IsDir() {
 				if files.MatchAny(exclude, rel+"/") {
 					continue
